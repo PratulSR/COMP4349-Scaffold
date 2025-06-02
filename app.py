@@ -91,10 +91,11 @@ def upload_image():
             return render_template("upload.html", error="Please select a valid image file.")
         filename = secure_filename(file.filename)
         data = file.read()
+        upload_key = f"uploads/{filename}"
 
         # 1. Upload to S3
         try:
-            get_s3_client().upload_fileobj(BytesIO(data), S3_BUCKET, filename)
+            get_s3_client().upload_fileobj(BytesIO(data), S3_BUCKET, upload_key)
         except Exception as e:
             return render_template("upload.html", error=f"S3 error: {e}")
 
@@ -125,25 +126,39 @@ def upload_image():
 
 @app.route("/gallery")
 def gallery():
-    conn = get_db_connection()
-    if not conn:
-        return render_template("gallery.html", error="Database connection failed.")
-    cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT image_key, caption FROM captions ORDER BY uploaded_at DESC")
-    rows = cur.fetchall()
-    conn.close()
+    """
+    Retrieves thumbnails and their captions from the database,
+    generates pre-signed URLs for secure access, and renders the gallery page.
+    """
+    try:
+        connection = get_db_connection()
+        if connection is None:
+            return render_template("gallery.html", error="Database Error: Unable to connect to the database.")
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("SELECT image_key, caption FROM captions ORDER BY uploaded_at DESC")
+        results = cursor.fetchall()
+        connection.close()
 
-    s3 = get_s3_client()
-    images = []
-    for r in rows:
-        url = s3.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": S3_BUCKET, "Key": r["image_key"]},
-            ExpiresIn=3600
-        )
-        images.append({"url": url, "caption": r["caption"]})
+        images_with_captions = []
+        s3 = get_s3_client()
+        for row in results:
+            # The thumbnail lives under "thumbnails/<filename>"
+            thumb_key = f"thumbnails/{row['image_key']}"
+            url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": S3_BUCKET, "Key": thumb_key},
+                ExpiresIn=3600,
+            )
+            images_with_captions.append({
+                "url": url,
+                "caption": row["caption"],
+            })
 
-    return render_template("gallery.html", images=images)
+        return render_template("gallery.html", images=images_with_captions)
+
+    except Exception as e:
+        return render_template("gallery.html", error=f"Database Error: {str(e)}")
+
 
 if __name__ == "__main__":
     # Bind to port 80 so ALB health checks (and user traffic) succeed
