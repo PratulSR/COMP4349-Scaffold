@@ -24,7 +24,7 @@ from werkzeug.utils import secure_filename
 # ── CONFIGURATION ───────────────────────────────────────────────────────────────
 
 # Gemini API
-GOOGLE_API_KEY = "AIzaSyDgZXDQPBlhHfqu7WToIgJpgk91YwNKxZk"
+GOOGLE_API_KEY = "AIzaSyD7_nrNfq4noFX2CWO-Bg5ZtTtedhohwNw"
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel(model_name="gemini-2.0-pro-exp-02-05")
 
