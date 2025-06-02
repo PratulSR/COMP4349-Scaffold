@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 # Gemini API
 GOOGLE_API_KEY = "AIzaSyD7_nrNfq4noFX2CWO-Bg5ZtTtedhohwNw"
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel(model_name="gemini-2.0-pro-exp-02-05")
+model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-04-17")
 
 # AWS / S3
 S3_BUCKET = "image-app-bucket-096340956834506"
