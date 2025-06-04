@@ -58,18 +58,18 @@ def get_db_connection():
 def allowed_file(fname):
     return "." in fname and fname.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def generate_image_caption(image_bytes):
-    try:
-        encoded = base64.b64encode(image_bytes).decode("utf-8")
-        resp = model.generate_content(
-            [
-                {"mime_type": "image/jpeg", "data": encoded},
-                "Caption this image.",
-            ]
-        )
-        return resp.text or "No caption generated."
-    except Exception as e:
-        return f"Error generating caption: {e}"
+# def generate_image_caption(image_bytes):
+#     try:
+#         encoded = base64.b64encode(image_bytes).decode("utf-8")
+#         resp = model.generate_content(
+#             [
+#                 {"mime_type": "image/jpeg", "data": encoded},
+#                 "Caption this image.",
+#             ]
+#         )
+#         return resp.text or "No caption generated."
+#     except Exception as e:
+#         return f"Error generating caption: {e}"
 
 # ── FLASK APP ─────────────────────────────────────────────────────────────────
 
@@ -100,29 +100,32 @@ def upload_image():
             return render_template("upload.html", error=f"S3 error: {e}")
 
         # 2. Generate caption
-        caption = generate_image_caption(data)
+        # caption = generate_image_caption(data)
 
         # 3. Save to RDS
         conn = get_db_connection()
         if not conn:
             return render_template("upload.html", error="Database connection failed.")
         cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO captions (image_key, caption) VALUES (%s, %s)",
-            (filename, caption)
-        )
+        # cur.execute(
+        #     "INSERT INTO captions (image_key, caption) VALUES (%s, %s)",
+        #     (filename, caption)
+        # )
         conn.commit()
         conn.close()
 
         # 4. Prepare for display
         img_b64 = base64.b64encode(data).decode("utf-8")
-        file_url = f"https://{S3_BUCKET}.s3.{S3_REGION}.amazonaws.com/{filename}"
-        return render_template("upload.html",
-                               image_data=img_b64,
-                               file_url=file_url,
-                               caption=caption)
-
+        file_url = f"https://{S3_BUCKET}.s3.{S3_REGION}.amazonaws.com/uploads/{filename}"
+        return render_template(
+            "upload.html",
+            image_data=img_b64,
+            file_url=file_url,
+            caption="(Caption pending…)"
+        )
+    # If GET request, simply render the upload form (no pre-filled variables)
     return render_template("upload.html")
+
 
 @app.route("/gallery")
 def gallery():
@@ -142,13 +145,18 @@ def gallery():
         images_with_captions = []
         s3 = get_s3_client()
         for row in results:
-            # The thumbnail lives under "thumbnails/<filename>"
+            # Each row has 'image_key' (e.g. "mypic.jpg") and 'caption' text
             thumb_key = f"thumbnails/{row['image_key']}"
-            url = s3.generate_presigned_url(
-                "get_object",
-                Params={"Bucket": S3_BUCKET, "Key": thumb_key},
-                ExpiresIn=3600,
-            )
+            try:
+                url = s3.generate_presigned_url(
+                    "get_object",
+                    Params={"Bucket": S3_BUCKET, "Key": thumb_key},
+                    ExpiresIn=3600
+                )
+            except Exception as e:
+                # If thumbnail does not yet exist or presigning fails, skip or log
+                print(f"Error generating presigned URL for {thumb_key}: {e}")
+                url = ""
             images_with_captions.append({
                 "url": url,
                 "caption": row["caption"],
